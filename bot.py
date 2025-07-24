@@ -27,6 +27,15 @@ bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 storage = MessageStorage()
 
+async def check_admin(message: Message) -> bool:
+    """Проверяет, является ли пользователь администратором чата"""
+    try:
+        member = await bot.get_chat_member(message.chat.id, message.from_user.id)
+        return member.status in ("administrator", "creator")
+    except TelegramBadRequest as e:
+        logger.error(f"Ошибка проверки прав пользователя {message.from_user.id} в чате {message.chat.id}: {e}")
+        return False
+
 logger.info("Бот запускается...")
 
 # --- Базовые команды ---
@@ -34,12 +43,12 @@ logger.info("Бот запускается...")
 async def cmd_start(message: Message):
     await message.answer(
         "Привет! Я бот для создания саммари обсуждений в чатах и топиках.\n\n"
-        "Основные команды:\n"
+        "Команды (доступны только администраторам чата):\n"
         "/set_summary_topic - установить топик для отправки саммари\n"
         "/set_interval - установить интервал саммари (в минутах)\n"
         "/summary_on - включить автоматическое саммари\n"
         "/summary_off - выключить автоматическое саммари\n"
-        "/summary_now - создать саммари сейчас (только для админов)"
+        "/summary_now - создать саммари сейчас"
     )
     logger.info(f"Отправлено приветственное сообщение в чате {message.chat.id}")
 
@@ -68,6 +77,11 @@ async def collect_messages(message: Message):
 # --- Настройки ---
 @dp.message(Command("set_summary_topic", ignore_mention=True))
 async def set_summary_topic(message: Message, command: CommandObject):
+    # Проверка на администратора
+    if not await check_admin(message):
+        await message.reply("Эта команда доступна только администраторам чата.")
+        return
+        
     # Теперь команда доступна и в общем чате, и в топиках
     if not command.args:
         await message.reply("Укажите ID топика или 0 для основного чата. Пример: /set_summary_topic 12345")
@@ -83,6 +97,11 @@ async def set_summary_topic(message: Message, command: CommandObject):
 
 @dp.message(Command("set_interval", ignore_mention=True))
 async def set_interval(message: Message, command: CommandObject):
+    # Проверка на администратора
+    if not await check_admin(message):
+        await message.reply("Эта команда доступна только администраторам чата.")
+        return
+        
     if not command.args:
         await message.reply("Укажите интервал в минутах. Пример: /set_interval 60")
         return
@@ -97,12 +116,22 @@ async def set_interval(message: Message, command: CommandObject):
 
 @dp.message(Command("summary_on", ignore_mention=True))
 async def summary_on(message: Message):
+    # Проверка на администратора
+    if not await check_admin(message):
+        await message.reply("Эта команда доступна только администраторам чата.")
+        return
+        
     await storage.set_summary_enabled(message.chat.id, True)
     await message.reply("Саммари включено.")
     logger.info(f"Саммари включено в чате {message.chat.id} (thread_id={message.message_thread_id})")
 
 @dp.message(Command("summary_off", ignore_mention=True))
 async def summary_off(message: Message):
+    # Проверка на администратора
+    if not await check_admin(message):
+        await message.reply("Эта команда доступна только администраторам чата.")
+        return
+        
     await storage.set_summary_enabled(message.chat.id, False)
     await message.reply("Саммари выключено.")
     logger.info(f"Саммари выключено в чате {message.chat.id} (thread_id={message.message_thread_id})")
@@ -110,19 +139,13 @@ async def summary_off(message: Message):
 @dp.message(Command("summary_now", ignore_mention=True))
 async def summary_now(message: Message):
     logger.info("Хендлер summary_now вызван")
+    # Проверка на администратора
+    if not await check_admin(message):
+        await message.reply("Эта команда доступна только администраторам чата.")
+        return
+        
     chat_id = message.chat.id
     user_id = message.from_user.id
-    # Проверка на администратора
-    try:
-        member = await bot.get_chat_member(chat_id, user_id)
-        if member.status not in ("administrator", "creator"):
-            await message.reply("Только администратор чата может вызывать принудительное саммари.")
-            logger.info(f"Пользователь {user_id} не админ, отказано в /summary_now в чате {chat_id} (thread_id={message.message_thread_id})")
-            return
-    except TelegramBadRequest as e:
-        await message.reply("Не удалось проверить права пользователя. Попробуйте позже.")
-        logger.error(f"Ошибка проверки прав пользователя {user_id} в чате {chat_id}: {e}")
-        return
     now = datetime.now(timezone.utc)
     yesterday = now - timedelta(days=1)
     since = (now - timedelta(hours=24)).isoformat()
