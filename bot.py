@@ -79,10 +79,19 @@ async def collect_messages(message: Message):
 async def select_topics(message: Message):
     chat_id = message.chat.id
     threads = await storage.get_threads(chat_id)
-    keyboard = InlineKeyboardMarkup()
+    buttons = []
+    chat = await bot.get_chat(chat_id)
     for thread_id in threads:
-        btn_text = f"Топик {thread_id}" if thread_id != 0 else "Основной чат"
-        keyboard.add(InlineKeyboardButton(text=btn_text, callback_data=f"select_topic:{thread_id}"))
+        if thread_id == 0:
+            btn_text = "Основной чат"
+        else:
+            try:
+                topic = await bot.get_forum_topic(chat_id, thread_id)
+                btn_text = getattr(topic, "name", f"Топик {thread_id}")
+            except Exception:
+                btn_text = f"Топик {thread_id}"
+        buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"select_topic:{thread_id}")])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.reply("Выберите топики для анализа:", reply_markup=keyboard)
 
 @dp.callback_query(F.data.startswith("select_topic:"))
@@ -105,8 +114,16 @@ async def set_summary_topic(message: Message, command: CommandObject):
     chat_id = message.chat.id
     threads = await storage.get_threads(chat_id)
     buttons = []
+    chat = await bot.get_chat(chat_id)
     for thread_id in threads:
-        btn_text = f"Топик {thread_id}" if thread_id != 0 else "Основной чат"
+        if thread_id == 0:
+            btn_text = "Основной чат"
+        else:
+            try:
+                topic = await bot.get_forum_topic(chat_id, thread_id)
+                btn_text = getattr(topic, "name", f"Топик {thread_id}")
+            except Exception:
+                btn_text = f"Топик {thread_id}"
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"set_summary_topic:{thread_id}")])
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.reply("Выберите топик для публикации саммари:", reply_markup=keyboard)
@@ -316,4 +333,4 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
