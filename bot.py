@@ -105,6 +105,7 @@ async def handle_select_topic(callback: types.CallbackQuery):
     thread_id = int(callback.data.split(":")[1])
     await storage.set_selected_topic(chat_id, thread_id)
     await callback.answer(f"Топик {thread_id} выбран для анализа!")
+
 @dp.message(Command("set_summary_topic", ignore_mention=True))
 async def set_summary_topic(message: Message, command: CommandObject):
     # Проверка на администратора
