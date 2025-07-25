@@ -81,7 +81,7 @@ async def summarize_threads(storage, chat_id, threads, since_date=None):
             f"{text_block}"
         )
 
-        response = await model.generate_content_async(prompt)
+        response = model.generate_content(prompt)
         topic = clean_text(response.text.strip())
         emoji = get_topic_emoji(topic)
         msg_count = len(messages)
