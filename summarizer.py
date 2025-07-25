@@ -56,7 +56,7 @@ async def summarize_threads(storage, chat_id, threads, since_date=None):
         )
 
         response = await openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4-turbo-preview",
             messages=[
                 {"role": "system", "content": "Вы - полезный помощник с искусственным интеллектом, который обобщает сообщения чата. Сделайте все возможное, чтобы предоставить полезную информацию о том, что обсуждалось в предоставленных сообщениях чата."},
                 {"role": "user", "content": prompt}
