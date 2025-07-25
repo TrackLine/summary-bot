@@ -143,6 +143,9 @@ async def summary_now(message: Message):
     if not await check_admin(message):
         await message.reply("Эта команда доступна только администраторам чата.")
         return
+    
+    # Отправляем сообщение о начале обработки
+    processing_msg = await message.reply("🔄 Генерирую саммари, это может занять несколько секунд...")
         
     chat_id = message.chat.id
     user_id = message.from_user.id
@@ -172,6 +175,8 @@ async def summary_now(message: Message):
                         parse_mode="HTML"
                     )
                     logger.info(f"Отправлено саммари для топика {thread_id} в чате {chat_id}")
+                    # Удаляем сообщение о генерации
+                    await processing_msg.delete()
         else:
             # Если указан специальный топик, отправляем общее саммари туда
             all_summaries = await summarize_threads(storage, chat_id, threads)
@@ -184,8 +189,11 @@ async def summary_now(message: Message):
                     parse_mode="HTML"
                 )
                 logger.info(f"Отправлено общее саммари в топик {topic_id} чата {chat_id}")
+                # Удаляем сообщение о генерации
+                await processing_msg.delete()
             else:
-                await message.reply("Нет сообщений за последние 24 часа для саммари.")
+                # Заменяем сообщение о генерации на сообщение об отсутствии данных
+                await processing_msg.edit_text("Нет сообщений за последние 24 часа для саммари.")
     else:
         # Для обычного чата делаем одно общее саммари
         summaries = await summarize_threads(storage, chat_id, [0])  # Только основной чат
@@ -196,8 +204,11 @@ async def summary_now(message: Message):
                 send_kwargs["message_thread_id"] = topic_id
             await bot.send_message(chat_id, summary_text, **send_kwargs)
             logger.info(f"Отправлено саммари в чат {chat_id}")
+            # Удаляем сообщение о генерации
+            await processing_msg.delete()
         else:
-            await message.reply("Нет сообщений за последние 24 часа для саммари.")
+            # Заменяем сообщение о генерации на сообщение об отсутствии данных
+            await processing_msg.edit_text("Нет сообщений за последние 24 часа для саммари.")
 
 # --- Периодический запуск саммари ---
 async def periodic_summary():
