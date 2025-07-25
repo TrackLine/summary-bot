@@ -1,12 +1,28 @@
 import os
-import google.generativeai as genai
+import logging
 from dotenv import load_dotenv
 
-
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+SUMMARIZER_PROVIDER = os.getenv("SUMMARIZER_PROVIDER", "gemini").lower()
+SUMMARIZER_MODEL = os.getenv("SUMMARIZER_MODEL", "models/gemini-1.0-pro")
+
+# --- Gemini ---
+if SUMMARIZER_PROVIDER == "gemini":
+    import google.generativeai as genai
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    genai.configure(api_key=GEMINI_API_KEY)
+    try:
+        available_models = [m.name for m in genai.list_models()]
+        logging.info(f"Доступные модели Gemini: {available_models}")
+    except Exception as e:
+        logging.error(f"Ошибка получения списка моделей Gemini: {e}")
+    model = genai.GenerativeModel(SUMMARIZER_MODEL)
+
+# --- OpenAI ---
+if SUMMARIZER_PROVIDER == "openai":
+    from openai import OpenAI
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 def get_topic_emoji(topic):
     # Расширенный словарь тем и их эмодзи
@@ -76,13 +92,26 @@ async def summarize_threads(storage, chat_id, threads, since_date=None):
 
         text_block = "\n".join([f"{m['user']}: {clean_text(m['text'])}" for m in messages])
         prompt = (
-            "Проанализируй диалог и определи несколько главных тем обсуждения. "
-            "Ответь ТОЛЬКО основными темами в 3-4 слова без дополнительного текста.\n\n"
+            "Проанализируй диалог и выдели несколько главных тем обсуждения, которые реально связаны с основной тематикой чата и обсуждались более 10-15 сообщений. "
+            "Игнорируй флуд, троллинг, шутки и оффтоп. Ответь только списком тем (каждая в 3-4 слова, без лишнего текста), отсортированных по важности.\n\n"
             f"{text_block}"
         )
 
-        response = model.generate_content(prompt)
-        topic = clean_text(response.text.strip())
+        if SUMMARIZER_PROVIDER == "gemini":
+            response = model.generate_content(prompt)
+            topic = clean_text(response.text.strip())
+        elif SUMMARIZER_PROVIDER == "openai":
+            completion = openai_client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=[
+                    {"role": "system", "content": "Вы — полезный помощник, который обобщает сообщения чата. Сделайте все возможное, чтобы предоставить полезную информацию о том, что обсуждалось в предоставленных сообщениях чата."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=100,
+            )
+            topic = clean_text(completion.choices[0].message.content.strip())
+        else:
+            topic = "[Провайдер саммари не настроен]"
         emoji = get_topic_emoji(topic)
         msg_count = len(messages)
         thread_url = f"https://t.me/c/{str(chat_id)[4:]}/{thread_id}" if thread_id else None
