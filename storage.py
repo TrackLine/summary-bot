@@ -9,6 +9,14 @@ load_dotenv()
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 class MessageStorage:
+    async def set_selected_topic(self, chat_id: int, thread_id: int):
+        await self._init()
+        await self.redis.hset(f"selected_topics:{chat_id}", thread_id, 1)
+
+    async def get_selected_topics(self, chat_id: int) -> list:
+        await self._init()
+        topics = await self.redis.hkeys(f"selected_topics:{chat_id}")
+        return [int(t) for t in topics]
     def __init__(self):
         self.redis = None
 

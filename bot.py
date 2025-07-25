@@ -2,6 +2,7 @@ import asyncio
 import os
 import logging
 from aiogram import Bot, Dispatcher, types, F
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command, CommandObject
 from aiogram.enums import ChatType
 from aiogram.types import Message
@@ -74,26 +75,52 @@ async def collect_messages(message: Message):
             logger.info(f"Собрано сообщение в чате {message.chat.id} (топик {thread_id}): {message.from_user.full_name}")
     return
 
-# --- Настройки ---
+@dp.message(Command("select_topics", ignore_mention=True))
+async def select_topics(message: Message):
+    chat_id = message.chat.id
+    threads = await storage.get_threads(chat_id)
+    keyboard = InlineKeyboardMarkup()
+    for thread_id in threads:
+        btn_text = f"Топик {thread_id}" if thread_id != 0 else "Основной чат"
+        keyboard.add(InlineKeyboardButton(text=btn_text, callback_data=f"select_topic:{thread_id}"))
+    await message.reply("Выберите топики для анализа:", reply_markup=keyboard)
+
+@dp.callback_query(F.data.startswith("select_topic:"))
+async def handle_select_topic(callback: types.CallbackQuery):
+    chat_id = callback.message.chat.id
+    user_id = callback.from_user.id
+    member = await bot.get_chat_member(chat_id, user_id)
+    if member.status not in ("administrator", "creator"):
+        await callback.answer("Только администратор может менять настройки!", show_alert=True)
+        return
+    thread_id = int(callback.data.split(":")[1])
+    await storage.set_selected_topic(chat_id, thread_id)
+    await callback.answer(f"Топик {thread_id} выбран для анализа!")
 @dp.message(Command("set_summary_topic", ignore_mention=True))
 async def set_summary_topic(message: Message, command: CommandObject):
     # Проверка на администратора
     if not await check_admin(message):
         await message.reply("Эта команда доступна только администраторам чата.")
         return
-        
-    # Теперь команда доступна и в общем чате, и в топиках
-    if not command.args:
-        await message.reply("Укажите ID топика или 0 для основного чата. Пример: /set_summary_topic 12345")
+    chat_id = message.chat.id
+    threads = await storage.get_threads(chat_id)
+    keyboard = InlineKeyboardMarkup()
+    for thread_id in threads:
+        btn_text = f"Топик {thread_id}" if thread_id != 0 else "Основной чат"
+        keyboard.add(InlineKeyboardButton(text=btn_text, callback_data=f"set_summary_topic:{thread_id}"))
+    await message.reply("Выберите топик для публикации саммари:", reply_markup=keyboard)
+
+@dp.callback_query(F.data.startswith("set_summary_topic:"))
+async def handle_set_summary_topic(callback: types.CallbackQuery):
+    chat_id = callback.message.chat.id
+    user_id = callback.from_user.id
+    member = await bot.get_chat_member(chat_id, user_id)
+    if member.status not in ("administrator", "creator"):
+        await callback.answer("Только администратор может менять настройки!", show_alert=True)
         return
-    try:
-        topic_id = int(command.args.strip())
-        await storage.set_summary_topic(message.chat.id, topic_id)
-        await message.reply(f"Топик для саммари установлен: {topic_id}")
-        logger.info(f"Установлен топик для саммари в чате {message.chat.id}: {topic_id} (thread_id={message.message_thread_id})")
-    except Exception as e:
-        logger.error(f"Ошибка установки топика: {e}")
-        await message.reply("Ошибка: не удалось установить топик. Пример: /set_summary_topic 12345")
+    topic_id = int(callback.data.split(":")[1])
+    await storage.set_summary_topic(chat_id, topic_id)
+    await callback.answer(f"Топик {topic_id} выбран для публикации саммари!")
 
 @dp.message(Command("set_interval", ignore_mention=True))
 async def set_interval(message: Message, command: CommandObject):
@@ -156,7 +183,8 @@ async def summary_now(message: Message):
     # Получаем информацию о чате
     chat = await bot.get_chat(chat_id)
     is_forum = chat.is_forum
-    threads = await storage.get_threads(chat_id)
+    selected_threads = await storage.get_selected_topics(chat_id)
+    threads = selected_threads if selected_threads else await storage.get_threads(chat_id)
     topic_id = await storage.get_summary_topic(chat_id)
 
     if is_forum:
@@ -271,25 +299,15 @@ async def periodic_summary():
                 logger.error(f"Ошибка при генерации/отправке саммари для чата {chat_id}: {e}")
 
 def format_summary(summaries, date):
-    """Форматирует саммари в нужный вид"""
-    summary_lines = [f"📆 Что обсуждалось {date.strftime('%d.%m.%Y')}\n"]
-    
-    # Добавляем темы
-    for topic in summaries["topics"]:
-        topic_line = f"{topic['emoji']} {topic['topic']}"
-        if topic["url"]:
-            topic_line += f" ({topic['message_count']} сообщений ({topic['url']}))"
-        else:
-            topic_line += f" ({topic['message_count']} сообщений)"
-        summary_lines.append(topic_line)
-
-    # Добавляем ссылки
-    if summaries["links"]:
-        summary_lines.append("\nИнтересные ссылки:\n")
-        for link in summaries["links"]:
-            summary_lines.append(f"🔗 {link}")
-
-    return "\n".join(summary_lines)
+    """Форматирует саммари: возвращает текст, сгенерированный ИИ, не длиннее 4096 символов (лимит Telegram), с тегом и ссылкой в конце"""
+    text = summaries["topics"]
+    link = os.getenv("DAILY_SUMMARY_LINK", "")
+    if link and link.strip():
+        tag_text = f"\n\n#dailysummary | <a href=\"{link}\">Разработчику на кофе</a>"
+    else:
+        tag_text = "\n\n#dailysummary"
+    max_len = 4096 - len(tag_text)
+    return text[:max_len] + tag_text
 
 async def main():
     logger.info("Бот запущен и ожидает события...")
