@@ -47,7 +47,12 @@ async def summarize_threads(storage, chat_id, threads, since_date=None):
                     if word.startswith(('http://', 'https://', 't.me/')):
                         links.append(word)
 
-        text_block = "\n".join([f"{m['user']}: {m['text']}" for m in messages])
+        # Очищаем текст от HTML тегов и экранируем специальные символы
+        def clean_text(text):
+            # Заменяем специальные символы HTML на их экранированные версии
+            return text.replace('<', '&lt;').replace('>', '&gt;').replace('&', '&amp;')
+            
+        text_block = "\n".join([f"{m['user']}: {clean_text(m['text'])}" for m in messages])
         prompt = (
             "На основе этих сообщений:\n"
             "1. Определи основную тему обсуждения одним коротким предложением (до 6 слов)\n"
@@ -64,7 +69,7 @@ async def summarize_threads(storage, chat_id, threads, since_date=None):
             max_tokens=100,
         )
 
-        topic = response.choices[0].message.content.strip()
+        topic = clean_text(response.choices[0].message.content.strip())
         emoji = get_topic_emoji(topic)
         msg_count = len(messages)
         thread_url = f"https://t.me/c/{str(chat_id)[4:]}/{thread_id}" if thread_id else None
@@ -81,7 +86,10 @@ async def summarize_threads(storage, chat_id, threads, since_date=None):
     # Сортируем по количеству сообщений
     summaries.sort(key=lambda x: x["message_count"], reverse=True)
     
+    # Очищаем ссылки от HTML тегов и экранируем специальные символы
+    clean_links = [clean_text(link) for link in set(links)]
+    
     return {
         "topics": summaries,
-        "links": list(set(links))  # Убираем дубликаты ссылок
+        "links": clean_links  # Очищенные уникальные ссылки
     } 
