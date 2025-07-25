@@ -104,10 +104,11 @@ async def set_summary_topic(message: Message, command: CommandObject):
         return
     chat_id = message.chat.id
     threads = await storage.get_threads(chat_id)
-    keyboard = InlineKeyboardMarkup()
+    buttons = []
     for thread_id in threads:
         btn_text = f"Топик {thread_id}" if thread_id != 0 else "Основной чат"
-        keyboard.add(InlineKeyboardButton(text=btn_text, callback_data=f"set_summary_topic:{thread_id}"))
+        buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"set_summary_topic:{thread_id}")])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.reply("Выберите топик для публикации саммари:", reply_markup=keyboard)
 
 @dp.callback_query(F.data.startswith("set_summary_topic:"))
