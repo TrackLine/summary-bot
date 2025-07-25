@@ -54,7 +54,7 @@ async def cmd_start(message: Message):
     logger.info(f"Отправлено приветственное сообщение в чате {message.chat.id}")
 
 # --- Сбор сообщений ---
-@dp.message(~Command("start", "set_summary_topic", "set_interval", "summary_on", "summary_off", "summary_now"))
+@dp.message(~Command("start", "set_summary_topic", "set_interval", "summary_on", "summary_off", "summary_now", "select_topics"))
 async def collect_messages(message: Message):
     if message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP, ChatType.PRIVATE]:
         # Проверяем наличие текста в сообщении
@@ -75,6 +75,7 @@ async def collect_messages(message: Message):
             logger.info(f"Собрано сообщение в чате {message.chat.id} (топик {thread_id}): {message.from_user.full_name}")
     return
 
+# --- Выбор топиков для анализа ---
 @dp.message(Command("select_topics", ignore_mention=True))
 async def select_topics(message: Message):
     chat_id = message.chat.id
@@ -106,6 +107,7 @@ async def handle_select_topic(callback: types.CallbackQuery):
     await storage.set_selected_topic(chat_id, thread_id)
     await callback.answer(f"Топик {thread_id} выбран для анализа!")
 
+# --- Выбор топика для публикации саммари ---
 @dp.message(Command("set_summary_topic", ignore_mention=True))
 async def set_summary_topic(message: Message, command: CommandObject):
     # Проверка на администратора
