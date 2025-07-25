@@ -86,11 +86,14 @@ async def select_topics(message: Message):
         if thread_id == 0:
             btn_text = "Основной чат"
         else:
+            topic_name = None
             try:
-                topic = await bot.get_forum_topic(chat_id, thread_id)
-                btn_text = getattr(topic, "name", f"Топик {thread_id}")
-            except Exception:
-                btn_text = f"Топик {thread_id}"
+                topic = await bot.get_forum_topic(chat_id=chat_id, message_thread_id=thread_id)
+                if hasattr(topic, "name"):
+                    topic_name = topic.name
+            except Exception as e:
+                logger.warning(f"Не удалось получить имя топика {thread_id}: {e}")
+            btn_text = topic_name if topic_name else f"Топик {thread_id}"
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"select_topic:{thread_id}")])
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.reply("Выберите топики для анализа:", reply_markup=keyboard)
@@ -122,11 +125,14 @@ async def set_summary_topic(message: Message, command: CommandObject):
         if thread_id == 0:
             btn_text = "Основной чат"
         else:
+            topic_name = None
             try:
-                topic = await bot.get_forum_topic(chat_id, thread_id)
-                btn_text = getattr(topic, "name", f"Топик {thread_id}")
-            except Exception:
-                btn_text = f"Топик {thread_id}"
+                topic = await bot.get_forum_topic(chat_id=chat_id, message_thread_id=thread_id)
+                if hasattr(topic, "name"):
+                    topic_name = topic.name
+            except Exception as e:
+                logger.warning(f"Не удалось получить имя топика {thread_id}: {e}")
+            btn_text = topic_name if topic_name else f"Топик {thread_id}"
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"set_summary_topic:{thread_id}")])
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.reply("Выберите топик для публикации саммари:", reply_markup=keyboard)
